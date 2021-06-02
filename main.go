@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -22,6 +23,7 @@ const (
 
 var opts struct {
 	SecurityGroupID string `short:"s" long:"security-group-id" required:"true" description:"ID of security group."`
+	Identifier      string `short:"i" long:"identifier" required:"true" description:"A unique string to distinguish the environment where this program is running."`
 	LogFilePath     string `short:"l" long:"log-file-path" description:"Path of log file. Uses standard error, if not specified."`
 	AWSProfile      string `long:"profile" required:"true" description:"AWS profile name"`
 	AWSRegion       string `long:"region" required:"true" description:"AWS region name"`
@@ -160,6 +162,7 @@ func updateSecurityGroup(i4 string, sg *ec2.SecurityGroup) error {
 	}
 
 	logDebug("authorizing existing ip range ...")
+	timestamp := time.Now().Format(time.RFC3339)
 	cidrIPv4 := i4 + "/32"
 	in := &ec2.AuthorizeSecurityGroupIngressInput{
 		GroupId: sg.GroupId,
@@ -171,7 +174,7 @@ func updateSecurityGroup(i4 string, sg *ec2.SecurityGroup) error {
 				IpRanges: []*ec2.IpRange{
 					{
 						CidrIp:      aws.String(cidrIPv4),
-						Description: aws.String(nexusMagicDescription),
+						Description: aws.String(opts.Identifier + " / " + timestamp + " / " + nexusMagicDescription),
 					},
 				},
 			},
@@ -187,7 +190,7 @@ func updateSecurityGroup(i4 string, sg *ec2.SecurityGroup) error {
 func revokeIPRangeWithNexusMagicDescriptionIfExist(ec2Client *ec2.EC2, sg *ec2.SecurityGroup) error {
 	for _, perm := range sg.IpPermissions {
 		for _, r := range perm.IpRanges {
-			if r.Description != nil && *r.Description == nexusMagicDescription {
+			if r.Description != nil && strings.HasPrefix(*r.Description, opts.Identifier) {
 				logDebug("revoking existing ip range ...")
 				in := &ec2.RevokeSecurityGroupIngressInput{
 					GroupId:    sg.GroupId,
